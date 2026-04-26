@@ -105,7 +105,7 @@
         <?php } ?>
     </div>
 
-    <a href="index.html" class="btn-voltar">← Voltar para o início</a>
+    <a href="index.php" class="btn-voltar">← Voltar para o início</a>
 
     <script>
         function showTab(tabId, btn) {
