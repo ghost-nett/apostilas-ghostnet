@@ -1,11 +1,13 @@
 <?php 
 include 'config.php'; 
 
-// Pega os dados enviados pela página de seleção
 $serie_escolhida = isset($_GET['serie']) ? $_GET['serie'] : '';
 $categoria = isset($_GET['cat']) ? $_GET['cat'] : '';
+$arquivo_aberto = isset($_GET['arquivo']) ? $_GET['arquivo'] : '';
+$titulo_aberto = isset($_GET['titulo']) ? $_GET['titulo'] : '';
+$offset_aberto = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 
-// Lógica de Banco de Dados (Mantida 100% igual)
+// Lógica de busca no banco
 if ($serie_escolhida == "SP Acao") {
     $sql = "SELECT * FROM apostilas WHERE serie = 'SP Acao' ORDER BY disciplina DESC, titulo ASC";
 } elseif ($serie_escolhida != "") {
@@ -23,237 +25,167 @@ $result = $conn->query($sql);
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Ghostnet Apostilas — Leitor</title>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
- 
-  :root {
-    --bg: #090A0F;
-    --surface: rgba(21, 21, 28, 0.4); 
-    --border: rgba(255,255,255,0.1);
-    --text: #f3f4f6;
-    --muted: rgba(243,244,246,0.4);
-    --accent: #ef4444;
-  }
- 
-  body {
-    font-family: 'Sora', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ghostnet — <?php echo $serie_escolhida ?: 'Materiais'; ?></title>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { --bg: #090A0F; --border: rgba(255,255,255,0.1); --accent: #ef4444; }
+        
+        body { font-family: 'Sora', sans-serif; background: var(--bg); color: #fff; min-height: 100vh; }
 
-  /* ── FUNDO IGUAL À PÁGINA INICIAL ── */
-  #stars-container { 
-    position: fixed; 
-    top: 0; left: 0; 
-    width: 100%; height: 100%; 
-    background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%); 
-    z-index: -2; 
-    overflow: hidden; 
-  }
-  #stars, #stars2 { position: absolute; top: 0; left: 0; background: transparent; }
-  @keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
-  #stars { width: 1px; height: 1px; animation: animStar 50s linear infinite; }
-  #stars2 { width: 2px; height: 2px; animation: animStar 100s linear infinite; }
-  #stars:after, #stars2:after { content: " "; position: absolute; top: 2000px; width: inherit; height: inherit; box-shadow: inherit; }
+        /* FUNDO ESTELAR */
+        #stars-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%); z-index: -1; }
+        #stars, #stars2 { position: absolute; top: 0; left: 0; background: transparent; }
+        #stars { width: 1px; height: 1px; animation: animStar 50s linear infinite; }
+        #stars2 { width: 2px; height: 2px; animation: animStar 100s linear infinite; }
+        @keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
 
-  /* ── BARRAS TRANSPARENTES (GLASS) ── */
-  .topbar {
-    height: 55px;
-    background: rgba(15, 15, 20, 0.5);
-    backdrop-filter: blur(15px);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; padding: 0 1.5rem; gap: 16px;
-    z-index: 1000; flex-shrink: 0;
-  }
-  .topbar-back { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
-  .topbar-title { font-size: 14px; font-weight: 600; color: #fff; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
- 
-  .viewer-layout { flex: 1; display: flex; overflow: hidden; background: transparent; }
- 
-  .sidebar {
-    width: 260px;
-    background: rgba(15, 15, 20, 0.5);
-    backdrop-filter: blur(25px);
-    border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; z-index: 900;
-  }
-  .sidebar-head { padding: 20px 16px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
-  .sidebar-books { overflow-y: auto; flex: 1; padding: 12px; }
-  .sidebar-section { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent); padding: 16px 8px 8px; }
-  
-  .sidebar-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; cursor: pointer; transition: 0.2s; margin-bottom: 8px; border: 1px solid transparent; }
-  .sidebar-item:hover { background: rgba(255, 255, 255, 0.05); }
-  .sidebar-item.active { 
-    background: rgba(239, 68, 68, 0.15); 
-    border: 1px solid #ef4444; 
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); 
-  }
-  
-  .sidebar-num { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; background: rgba(255,255,255,0.05); }
-  .sidebar-name { font-size: 13px; font-weight: 600; color: #fff; }
+        /* HEADER */
+        .header { 
+            padding: 20px; text-align: center; background: rgba(15, 15, 20, 0.5); 
+            backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+        }
+        .btn-voltar { text-decoration: none; color: var(--accent); font-size: 14px; font-weight: bold; display: block; margin-bottom: 5px; }
+        
+        /* GRID DE CARDS */
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .grid-books { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
 
-  .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: transparent; }
-  .canvas-wrap { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; background: transparent; }
-  #pdf-canvas { max-width: 100%; border-radius: 4px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); background: #fff; }
+        .card-book {
+            background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 25px; text-align: center; backdrop-filter: blur(5px);
+            transition: 0.3s ease; display: flex; flex-direction: column; align-items: center;
+        }
+        .card-book:hover { border-color: var(--accent); transform: translateY(-5px); background: rgba(239, 68, 68, 0.05); }
 
-  /* ── CONTROLES DO RODAPÉ ── */
-  .controls {
-    height: 70px; background: rgba(15, 15, 20, 0.8); backdrop-filter: blur(15px); border-top: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center; gap: 12px; flex-shrink: 0;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .ctrl-btn { width: 40px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .ctrl-btn:hover { background: var(--accent); }
-  #page-input { width: 55px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: var(--accent); font-weight: 700; text-align: center; padding: 6px 0; outline: none; }
+        .book-icon { font-size: 40px; margin-bottom: 15px; }
+        .book-title { font-size: 18px; font-weight: 700; margin-bottom: 5px; }
+        .book-discipline { font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
 
-  @media (max-width: 768px) {
-    .sidebar { position: absolute; left: 0; top: 0; bottom: 0; transform: translateX(-100%); transition: transform 0.3s ease; width: 280px; }
-    .sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
-  }
-</style>
+        /* BOTÕES */
+        .actions { display: flex; gap: 10px; width: 100%; }
+        .btn { 
+            flex: 1; padding: 12px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;
+            display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;
+        }
+        .btn-read { background: var(--accent); color: #fff; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
+        .btn-download { background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border); }
+        .btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        /* LEITOR PDF (SÓ APARECE QUANDO CLICAR EM LER) */
+        #pdf-viewer-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); 
+            z-index: 1000; display: <?php echo $arquivo_aberto ? 'flex' : 'none'; ?>; flex-direction: column; 
+        }
+        .viewer-top { height: 60px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: #0f0f14; }
+        .canvas-wrap { flex: 1; overflow: auto; padding: 20px; display: flex; justify-content: center; }
+        #pdf-canvas { max-width: 100%; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+        
+        .controls { height: 70px; background: #0f0f14; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .ctrl-btn { padding: 10px 15px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: #fff; border-radius: 8px; cursor: pointer; }
+    </style>
 </head>
 <body>
 
 <div id="stars-container"><div id="stars"></div><div id="stars2"></div></div>
 
-<div class="topbar">
-  <button style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;" onclick="toggleSidebar()">☰</button>
-  <a class="topbar-back" href="selecao.php">← VOLTAR</a>
-  <div class="topbar-title" id="topbar-title">Selecione uma apostila</div>
+<div class="header">
+    <a href="selecao.php" class="btn-voltar">← MUDAR SÉRIE</a>
+    <h2><?php echo $serie_escolhida; ?></h2>
 </div>
 
-<div class="viewer-layout">
-  <div class="sidebar" id="sidebar">
-    <div class="sidebar-head">Biblioteca Ghostnet</div>
-    <div class="sidebar-books" id="sidebar-books">
-      <?php
-      $current_discipline = "";
-      if ($result && $result->num_rows > 0) {
-          while($row = $result->fetch_assoc()) {
-              if ($current_discipline != $row['disciplina']) {
-                  $current_discipline = $row['disciplina'];
-                  echo '<div class="sidebar-section">' . $current_discipline . '</div>';
-              }
-              $numero_icone = substr(trim($row['titulo']), -1);
-              if(!is_numeric($numero_icone)) $numero_icone = "•";
-              echo '<div class="sidebar-item" onclick="openBook(\'apostilas/'.$row['arquivo'].'\',\''.$row['titulo'].'\',\''.$row['disciplina'].'\',this, '.$row['offset'].')">';
-              echo '  <div class="sidebar-num">'.$numero_icone.'</div>';
-              echo '  <div class="sidebar-info">';
-              echo '    <div class="sidebar-name">'.$row['titulo'].'</div>';
-              echo '    <div class="sidebar-sub">'.$row['disciplina'].'</div>';
-              echo '  </div>';
-              echo '</div>';
-          }
-      }
-      ?>
+<div class="container">
+    <div class="grid-books">
+        <?php
+        if ($result && $result->num_rows > 0) {
+            while($row = $result->fetch_assoc()) {
+                $icon = (strpos($row['disciplina'], 'Matemática') !== false) ? '📐' : ((strpos($row['disciplina'], 'Português') !== false) ? '📚' : '🧪');
+                ?>
+                <div class="card-book">
+                    <div class="book-icon"><?php echo $icon; ?></div>
+                    <div class="book-title"><?php echo $row['titulo']; ?></div>
+                    <div class="book-discipline"><?php echo $row['disciplina']; ?></div>
+                    <div class="actions">
+                        <a href="?serie=<?php echo $serie_escolhida; ?>&cat=<?php echo $categoria; ?>&arquivo=<?php echo urlencode($row['arquivo']); ?>&titulo=<?php echo urlencode($row['titulo']); ?>&offset=<?php echo $row['offset']; ?>" class="btn btn-read">Ler Online</a>
+                        <a href="apostilas/<?php echo $row['arquivo']; ?>" download class="btn btn-download">Baixar</a>
+                    </div>
+                </div>
+                <?php
+            }
+        }
+        ?>
     </div>
-  </div>
- 
-  <div class="main-area">
-    <div class="canvas-wrap" id="canvas-wrap">
-      <div id="loading-msg" style="text-align:center; padding-top:100px; color:#fff; display:block;">
-        <div style="font-size:40px; margin-bottom:10px; animation: pulse 1.5s infinite;">🚀</div>
-        <div id="loading-text" style="font-weight:bold; font-size:18px;">Escolha um material na lateral</div>
-      </div>
-      <canvas id="pdf-canvas" style="display:none"></canvas>
-    </div>
- 
-    <div class="controls" id="controls" style="display:none">
-      <button class="ctrl-btn" onclick="goToPage(1)">⏮</button>
-      <button class="ctrl-btn" id="btn-prev" onclick="changePage(-1)">‹</button>
-      <div style="font-size:13px; color:#fff">
-        <input type="text" id="page-input" value="1" onchange="goToPage(this.value)"> / <span id="page-total">?</span>
-      </div>
-      <button class="ctrl-btn" id="btn-next" onclick="changePage(1)">›</button>
-      <button class="ctrl-btn" id="btn-last" onclick="goToPage(totalPages)">⏭</button>
-    </div>
-  </div>
 </div>
- 
-<script>
-  function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
-  
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  let pdfDoc = null, currentPage = 1, totalPages = 0, zoom = 1, rendering = false, currentOffset = 0;
 
-  function openBook(url, title, discipline, el, offset) {
-    currentOffset = parseInt(offset);
-    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-    el.classList.add('active');
-    document.getElementById('topbar-title').textContent = title;
-    if (window.innerWidth <= 768) { document.getElementById('sidebar').classList.remove('open'); }
-    loadPDF(url);
-  }
-
-  function loadPDF(url) {
-    const canvas = document.getElementById('pdf-canvas'), 
-          loading = document.getElementById('loading-msg'), 
-          loadingText = document.getElementById('loading-text'),
-          controls = document.getElementById('controls');
+<div id="pdf-viewer-overlay">
+    <div class="viewer-top">
+        <div style="font-weight: bold;"><?php echo $titulo_aberto; ?></div>
+        <a href="leitor.php?serie=<?php echo $serie_escolhida; ?>&cat=<?php echo $categoria; ?>" style="color: var(--accent); text-decoration: none; font-weight: bold;">FECHAR ✕</a>
+    </div>
     
-    // Limpa o canvas e mostra o "Carregando..."
-    canvas.style.display = 'none'; 
-    controls.style.display = 'none';
-    loading.style.display = 'block';
-    loadingText.innerHTML = "Carregando livro...";
+    <div class="canvas-wrap">
+        <canvas id="pdf-canvas"></canvas>
+    </div>
 
-    pdfjsLib.getDocument(url).promise.then(pdf => {
-      pdfDoc = pdf; totalPages = pdf.numPages;
-      document.getElementById('page-total').textContent = totalPages - currentOffset;
-      currentPage = 1 + currentOffset;
-      
-      // Esconde o loading e mostra o PDF
-      controls.style.display = 'flex'; 
-      loading.style.display = 'none'; 
-      canvas.style.display = 'block';
-      renderPage(currentPage);
-    }).catch(err => {
-      loadingText.innerHTML = "⚠️ Erro ao abrir material.";
+    <div class="controls">
+        <button class="ctrl-btn" onclick="changePage(-1)">Anterior</button>
+        <span id="page-num">0</span> / <span id="page-count">0</span>
+        <button class="ctrl-btn" onclick="changePage(1)">Próxima</button>
+    </div>
+</div>
+
+<script>
+    // Gerador de Estrelas
+    function createStars(id, count) {
+        const canvas = document.getElementById(id);
+        let stars = "";
+        for (let i = 0; i < count; i++) {
+            stars += `${Math.random() * 2000}px ${Math.random() * 2000}px #FFF${i < count - 1 ? ',' : ''}`;
+        }
+        canvas.style.boxShadow = stars;
+    }
+    createStars('stars', 700); createStars('stars2', 200);
+
+    // Lógica do PDF
+    <?php if($arquivo_aberto): ?>
+    const url = 'apostilas/<?php echo $arquivo_aberto; ?>';
+    const offset = <?php echo $offset_aberto; ?>;
+    let pdfDoc = null, pageNum = 1 + offset, pageRendering = false, pageNumPending = null;
+    const canvas = document.getElementById('pdf-canvas'), ctx = canvas.getContext('2d');
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    function renderPage(num) {
+        pageRendering = true;
+        pdfDoc.getPage(num).then((page) => {
+            const viewport = page.getViewport({scale: 1.5});
+            canvas.height = viewport.height; canvas.width = viewport.width;
+            const renderContext = { canvasContext: ctx, viewport: viewport };
+            page.render(renderContext).promise.then(() => {
+                pageRendering = false;
+                if (pageNumPending !== null) { renderPage(pageNumPending); pageNumPending = null; }
+            });
+        });
+        document.getElementById('page-num').textContent = num - offset;
+    }
+
+    pdfjsLib.getDocument(url).promise.then((pdf) => {
+        pdfDoc = pdf;
+        document.getElementById('page-count').textContent = pdfDoc.numPages - offset;
+        renderPage(pageNum);
     });
-  }
 
-  function renderPage(num) {
-    rendering = true;
-    pdfDoc.getPage(num).then(page => {
-      const outputScale = window.devicePixelRatio || 1;
-      const viewport = page.getViewport({ scale: zoom * outputScale });
-      const canvas = document.getElementById('pdf-canvas'), ctx = canvas.getContext('2d');
-      canvas.width = viewport.width; canvas.height = viewport.height;
-      canvas.style.width = (viewport.width / outputScale) + "px";
-      page.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => { rendering = false; updateUI(); });
-    });
-  }
-
-  function changePage(delta) { if (!rendering && currentPage + delta >= 1 && currentPage + delta <= totalPages) { currentPage += delta; renderPage(currentPage); } }
-  function goToPage(val) { let n = parseInt(val) + currentOffset; if (n > 0 && n <= totalPages) { currentPage = n; renderPage(currentPage); } }
-  function updateUI() { document.getElementById('page-input').value = currentPage - currentOffset; }
-
-  function createStars(id, count) {
-    const canvas = document.getElementById(id);
-    let stars = "";
-    for (let i = 0; i < count; i++) { stars += `${Math.random() * 2000}px ${Math.random() * 2000}px #FFF${i < count - 1 ? ',' : ''}`; }
-    canvas.style.boxShadow = stars;
-  }
-  createStars('stars', 700); createStars('stars2', 200);
+    function changePage(delta) {
+        if (pageRendering) return;
+        if (pageNum + delta <= offset || pageNum + delta > pdfDoc.numPages) return;
+        pageNum += delta;
+        renderPage(pageNum);
+    }
+    <?php endif; ?>
 </script>
-
-<style>
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
-  100% { transform: scale(1); opacity: 1; }
-}
-</style>
 
 </body>
 </html>
