@@ -74,22 +74,24 @@ $result = $conn->query($sql);
         .canvas-wrap { 
             flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 10px; background: #1a1a1a;
         }
-        /* Ajuste para não achatar */
         #pdf-canvas { 
-            max-width: 100%; height: auto !important; box-shadow: 0 0 30px rgba(0,0,0,0.5); 
+            max-width: none; /* Permitir que o zoom funcione além da largura da tela */
+            height: auto !important; box-shadow: 0 0 30px rgba(0,0,0,0.5); 
         }
         
         .controls { 
-            height: 80px; background: #0f0f14; display: flex; align-items: center; justify-content: center; gap: 10px; 
-            padding-bottom: env(safe-area-inset-bottom);
+            height: auto; min-height: 80px; background: #0f0f14; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 15px; 
+            padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom));
         }
-        .ctrl-btn { padding: 12px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #fff; border-radius: 10px; cursor: pointer; font-size: 14px; }
+        .ctrl-group { display: flex; align-items: center; gap: 10px; }
+        .ctrl-btn { width: 44px; height: 44px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #fff; border-radius: 10px; cursor: pointer; font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        .ctrl-btn:active { background: var(--accent); }
         
-        /* Caixa de escolher página */
         #page-input { 
             width: 50px; background: #000; border: 1px solid var(--accent); color: var(--accent); 
             text-align: center; padding: 8px; border-radius: 8px; font-weight: bold; outline: none;
         }
+        .zoom-info { font-size: 12px; color: rgba(255,255,255,0.5); width: 40px; text-align: center; }
     </style>
 </head>
 <body>
@@ -133,11 +135,19 @@ $result = $conn->query($sql);
     </div>
 
     <div class="controls">
-        <button class="ctrl-btn" onclick="changePage(-1)">‹</button>
-        <div style="font-size: 14px;">
-            <input type="number" id="page-input" value="1" onchange="goToPage(this.value)"> / <span id="page-count">0</span>
+        <div class="ctrl-group">
+            <button class="ctrl-btn" onclick="changePage(-1)">‹</button>
+            <div style="font-size: 14px;">
+                <input type="number" id="page-input" value="1" onchange="goToPage(this.value)"> / <span id="page-count">0</span>
+            </div>
+            <button class="ctrl-btn" onclick="changePage(1)">›</button>
         </div>
-        <button class="ctrl-btn" onclick="changePage(1)">›</button>
+
+        <div class="ctrl-group">
+            <button class="ctrl-btn" onclick="changeZoom(-0.2)">−</button>
+            <span class="zoom-info" id="zoom-val">100%</span>
+            <button class="ctrl-btn" onclick="changeZoom(0.2)">+</button>
+        </div>
     </div>
 </div>
 
@@ -155,7 +165,7 @@ $result = $conn->query($sql);
     <?php if($arquivo_aberto): ?>
     const url = 'apostilas/<?php echo $arquivo_aberto; ?>';
     const offset = <?php echo $offset_aberto; ?>;
-    let pdfDoc = null, pageNum = 1 + offset, pageRendering = false;
+    let pdfDoc = null, pageNum = 1 + offset, pageRendering = false, scale = 1.2; // Escala inicial
     const canvas = document.getElementById('pdf-canvas'), ctx = canvas.getContext('2d');
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -163,7 +173,7 @@ $result = $conn->query($sql);
     function renderPage(num) {
         pageRendering = true;
         pdfDoc.getPage(num).then((page) => {
-            const viewport = page.getViewport({scale: 1.5});
+            const viewport = page.getViewport({scale: scale});
             canvas.height = viewport.height; 
             canvas.width = viewport.width;
             
@@ -173,6 +183,7 @@ $result = $conn->query($sql);
             });
         });
         document.getElementById('page-input').value = num - offset;
+        document.getElementById('zoom-val').textContent = Math.round(scale * 100) + "%";
     }
 
     pdfjsLib.getDocument(url).promise.then((pdf) => {
@@ -192,6 +203,16 @@ $result = $conn->query($sql);
         const target = parseInt(val) + offset;
         if (target > offset && target <= pdfDoc.numPages) {
             pageNum = target;
+            renderPage(pageNum);
+        }
+    }
+
+    function changeZoom(delta) {
+        if (pageRendering) return;
+        let newScale = scale + delta;
+        // Limites para não ficar pequeno demais nem gigante demais
+        if (newScale >= 0.6 && newScale <= 3.0) {
+            scale = newScale;
             renderPage(pageNum);
         }
     }
